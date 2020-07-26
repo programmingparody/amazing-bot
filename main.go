@@ -26,15 +26,12 @@ func main() {
 	amazonLogPath = os.Getenv("AMZN_PRODUCT_LOG_PATH")
 	fmt.Printf("Starting Bot\nBot Token: %v\nReferral Tag: %v\nDev Mode:%v\nAmazon Product Log Path:%v\n\n", botToken, referralTag, devMode, amazonLogPath)
 
-	session, _ := discordgo.New(botToken)
-
-	if err := session.Open(); err != nil {
+	discordSession, _ := discordgo.New(botToken)
+	if err := discordSession.Open(); err != nil {
 		panic(err)
 	}
-	defer session.Close()
-
-	session.AddHandler(OnMessage)
-	//session.AddHandler(OnReaction)
+	NewDiscordChatAppSession(discordSession).OnMessage(onMessage)
+	defer discordSession.Close()
 
 	//Code for closing the program (Ctrl+C)
 	sc := make(chan os.Signal, 1)
@@ -46,9 +43,21 @@ func log(e interface{}) {
 	fmt.Printf("Log: %v\n", e)
 }
 
-func OnMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
+func fetchProduct(link string, c chan amazonscraper.OnProductParams) {
+	amazonScraper := amazonscraper.NewSimpleProductScraperRoutine(func(p amazonscraper.OnProductParams) {
+		c <- p
+	})
+
+	startingRequest, _ := http.NewRequest("GET", link, nil)
+	startingRequest.Header.Add("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36")
+	go amazonScraper.Run(scrapers.HTTPStepParameters{
+		Request: startingRequest,
+	})
+}
+
+func onMessage(c ChatAppSession, m *Message) {
 	// Ignore all messages created by the bot
-	if m.Author.ID == s.State.User.ID || !amazonscraper.IsAmazonProductLink(m.Content) {
+	if m.MessageIsFromThisBot {
 		return
 	}
 
@@ -57,12 +66,14 @@ func OnMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if len(amazonLinks) == 0 {
 		return
 	}
+	productParamsChannel := make(chan amazonscraper.OnProductParams)
+	for _, link := range amazonLinks {
+		fetchProduct(link, productParamsChannel)
 
-	log("Found product")
-	amazonScraper := amazonscraper.NewSimpleProductScraperRoutine(func(p amazonscraper.OnProductParams) {
+		p := <-productParamsChannel
 		_, wholeMessageAsURLError := url.Parse(m.Content)
 		if wholeMessageAsURLError == nil {
-			go s.ChannelMessageDelete(m.ChannelID, m.ID)
+			go m.Remove()
 		} else {
 			log(wholeMessageAsURLError)
 		}
@@ -71,18 +82,9 @@ func OnMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 
 		p.Product.URL = amazonscraper.WithPromoCode(p.Product.URL, referralTag)
-		embed := ToEmbed(p.Product)
-		_, error := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+		error := m.RespondWithAmazonProduct(p.Product)
 		if error != nil {
 			log(error)
 		}
-	})
-
-	for _, link := range amazonLinks {
-		startingRequest, _ := http.NewRequest("GET", link, nil)
-		startingRequest.Header.Add("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36")
-		go amazonScraper.Run(scrapers.HTTPStepParameters{
-			Request: startingRequest,
-		})
 	}
 }

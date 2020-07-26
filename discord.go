@@ -7,6 +7,37 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+type DiscordBot struct {
+	session *discordgo.Session
+}
+
+func NewDiscordChatAppSession(s *discordgo.Session) *DiscordBot {
+	return &DiscordBot{
+		session: s,
+	}
+}
+
+func (db *DiscordBot) OnMessage(callback SetOnMessageCallback) error {
+	db.session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		retMessage := Message{}
+
+		retMessage.MessageIsFromThisBot = m.Author.ID == s.State.User.ID
+		retMessage.Content = m.Content
+
+		retMessage.Remove = func() error {
+			error := s.ChannelMessageDelete(m.ChannelID, m.ID)
+			return error
+		}
+		retMessage.RespondWithAmazonProduct = func(p *amazonscraper.Product) error {
+			embed := toEmbed(p)
+			_, error := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+			return error
+		}
+		callback(db, &retMessage)
+	})
+	return nil
+}
+
 func cutoffString(input string, max int, replacement string) string {
 	if len(input) > max {
 		return input[:max] + replacement
@@ -14,7 +45,7 @@ func cutoffString(input string, max int, replacement string) string {
 	return input
 }
 
-func ToEmbed(product *amazonscraper.Product) *discordgo.MessageEmbed {
+func toEmbed(product *amazonscraper.Product) *discordgo.MessageEmbed {
 	const maxContentLength = 150
 	const replacementContent = "..."
 

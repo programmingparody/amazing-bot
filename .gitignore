@@ -3,3 +3,4 @@ error_urls/*
 url_logs/*
 /logs/*
 run.sh
+/tmp
