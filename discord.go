@@ -8,20 +8,22 @@ import (
 )
 
 type DiscordBot struct {
-	session *discordgo.Session
+	session      *discordgo.Session
+	problemEmoji string
 }
 
 func NewDiscordChatAppSession(s *discordgo.Session) *DiscordBot {
 	return &DiscordBot{
-		session: s,
+		session:      s,
+		problemEmoji: "🇫", //For those on dark themed editors, it's that blue [F] emoji.
 	}
 }
 
 func discordMessageID(channelID string, messageID string) string {
-	return fmt.Sprintf("%s|%s", channelID, messageID)
+	return fmt.Sprintf("%s-%s", channelID, messageID)
 }
 
-func createMessageFromDiscordMessage(s *discordgo.Session, m *discordgo.Message) *Message {
+func (db *DiscordBot) createMessageFromDiscordMessage(s *discordgo.Session, m *discordgo.Message) *Message {
 	return &Message{
 		MessageIsFromThisBot: m.Author.ID == s.State.User.ID,
 		Content:              m.Content,
@@ -31,20 +33,27 @@ func createMessageFromDiscordMessage(s *discordgo.Session, m *discordgo.Message)
 			return error
 		},
 		RespondWithAmazonProduct: func(p *amazonscraper.Product) (string, error) {
-			embed := toEmbed(p)
+			embed := db.toEmbed(p)
 			m, error := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+			s.MessageReactionAdd(m.ChannelID, m.ID, db.problemEmoji)
+			if error != nil {
+				return "", error
+			}
 			return discordMessageID(m.ChannelID, m.ID), error
 		},
 	}
 }
 
-func (db *DiscordBot) isProblemReaction(e discordgo.Emoji) bool {
-	return true
+func (db *DiscordBot) isProblemReaction(m *discordgo.MessageReaction) bool {
+	return m.Emoji.Name == db.problemEmoji
 }
 
 func (db *DiscordBot) OnProductProblemReport(cb OnProductProblemReportCallback) error {
 	db.session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageReactionAdd) {
-		if db.isProblemReaction(m.Emoji) {
+		if m.UserID == s.State.User.ID {
+			return
+		}
+		if db.isProblemReaction(m.MessageReaction) {
 			cb(db, discordMessageID(m.ChannelID, m.MessageID))
 		}
 	})
@@ -53,7 +62,7 @@ func (db *DiscordBot) OnProductProblemReport(cb OnProductProblemReportCallback) 
 
 func (db *DiscordBot) OnMessage(cb OnMessageCallback) error {
 	db.session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		cb(db, createMessageFromDiscordMessage(s, m.Message))
+		cb(db, db.createMessageFromDiscordMessage(s, m.Message))
 	})
 	return nil
 }
@@ -65,9 +74,14 @@ func cutoffString(input string, max int, replacement string) string {
 	return input
 }
 
-func toEmbed(product *amazonscraper.Product) *discordgo.MessageEmbed {
+func (db *DiscordBot) toEmbed(product *amazonscraper.Product) *discordgo.MessageEmbed {
 	const maxContentLength = 150
 	const replacementContent = "..."
+
+	title := product.Title
+	if len(title) == 0 {
+		title = "*Title not found*"
+	}
 
 	priceText := fmt.Sprintf("%.2f", product.Price)
 	if product.OriginalPrice > 0 {
@@ -76,7 +90,7 @@ func toEmbed(product *amazonscraper.Product) *discordgo.MessageEmbed {
 		priceText = fmt.Sprintf("~~%0.2f~~\n**%0.2f**\n*%.2f (%.0f%%) off*", product.OriginalPrice, product.Price, savings, percentOff)
 	}
 	embed := discordgo.MessageEmbed{
-		Title:       product.Title,
+		Title:       title,
 		URL:         product.URL.String(),
 		Description: cutoffString(product.Description, maxContentLength, replacementContent),
 
@@ -110,5 +124,13 @@ func toEmbed(product *amazonscraper.Product) *discordgo.MessageEmbed {
 			Inline: true,
 		})
 	}
+
+	embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+		Name: "\u200B",
+		Value: fmt.Sprintf(
+			`**Something wrong with this result?**
+			React with %s to report this embed and pay respects`, db.problemEmoji),
+		Inline: false,
+	})
 	return &embed
 }

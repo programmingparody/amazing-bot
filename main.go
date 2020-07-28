@@ -7,91 +7,115 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 	"wishlist-bot/scrapers"
 	"wishlist-bot/scrapers/amazonscraper"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
 )
+
+//Environment variables
 
 var botToken string
 var referralTag string
 var devMode bool
 var amazonLogPath string
+var amazonLogTmpPath string
 
-//Keep track of messages that we've responded to
-//Used for when a problem reaction comes in so we can create a test object for it
-var messageResponseLogs *MemoryStorage
+//More globals
+//TODO: Don't use globals lol
 
 var amazonProductCache AmazonProductRepository
+var cachedUrlsToLogMap map[string]string
+var messageToLogMap map[string]string
 
 func main() {
-	//Environment variables
+	//Set Environment variables
+
 	botToken = os.Getenv("BOT_TOKEN")
 	referralTag = os.Getenv("AMZN_TAG")
 	devMode = os.Getenv("DEV") == "TRUE"
 	amazonLogPath = os.Getenv("AMZN_PRODUCT_LOG_PATH")
+	amazonLogTmpPath = os.Getenv("AMZN_PRODUCT_LOG_TMP_PATH")
 	fmt.Printf("Starting Bot\nBot Token: %v\nReferral Tag: %v\nDev Mode:%v\nAmazon Product Log Path:%v\n\n", botToken, referralTag, devMode, amazonLogPath)
 
-	//Discord Session
+	//Initialize Globals
+
+	amazonProductCache = &MemoryStorageToRepositoryAdapter{NewMemoryStorage()}
+	cachedUrlsToLogMap = make(map[string]string)
+	messageToLogMap = make(map[string]string)
+
+	//Discord session setup
+
 	discordSession, _ := discordgo.New(botToken)
 	if err := discordSession.Open(); err != nil {
 		panic(err)
 	}
 	defer discordSession.Close()
 
-	//Setup product repositories
-	messageResponseLogs = NewMemoryStorage()
-	amazonProductCache = &MemoryStorageToRepositoryAdapter{NewMemoryStorage()}
+	//Add amazon chatbot logic
 
 	hookAmazonChatBotToSession(NewDiscordChatAppSession(discordSession), fetchProduct, onProblemReport)
 
 	//Code for closing the program (Ctrl+C)
+
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
 }
 
-func logProductParams(p amazonscraper.OnProductParams) {
-	amazonscraper.CreateTestDataOnProduct(fmt.Sprintf(amazonLogPath, time.Now().String()), p)
+//funcs to map messages to logged products
+//TODO: Use file storage instead of memory, this can get big
+func addLogID(messageID string, logID string) {
+	messageToLogMap[messageID] = logID
+}
+func getLogIDFromMessage(messageID string) string {
+	return messageToLogMap[messageID]
 }
 
 func onProblemReport(cas ChatAppSession, messageID string) {
-	data, error := messageResponseLogs.Get(messageID)
-	if error != nil {
+	logID := getLogIDFromMessage(messageID)
+	if len(logID) == 0 {
 		return
 	}
-	params := data.(amazonscraper.OnProductParams)
-	go logProductParams(params)
+	fmt.Printf("Product was reported [%v]\n", logID)
+
+	os.Rename(fmt.Sprintf(amazonLogTmpPath+".json", logID), fmt.Sprintf(amazonLogPath+".json", logID))
+	os.Rename(fmt.Sprintf(amazonLogTmpPath+".html", logID), fmt.Sprintf(amazonLogPath+".html", logID))
 }
 
 func fetchProduct(link string, send SendProduct) {
+	if devMode {
+		PrintMemUsage()
+	}
+
 	url, error := url.Parse(link)
 	if error != nil {
 		return
 	}
 	cacheID := fmt.Sprintf("%v://%v%v", url.Scheme, url.Host, url.Path)
-	fmt.Printf("Normalized Product: %v\n", cacheID)
+	fmt.Printf("Normalized Product URL: %v\n", cacheID)
 
 	cachedProduct, error := amazonProductCache.Get(cacheID)
 	if cachedProduct != nil && error == nil {
-		fmt.Printf("Sending Cached Product\n")
-		send(cachedProduct)
+		newMessageID := send(cachedProduct)
+		messageToLogMap[newMessageID] = cachedUrlsToLogMap[cacheID]
 		return
 	}
 
 	amazonScraper := amazonscraper.NewSimpleProductScraperRoutine(func(p amazonscraper.OnProductParams) {
-		fmt.Printf("Sending Fetched Product\n")
+
 		p.Product.URL = amazonscraper.WithPromoCode(p.Product.URL, referralTag)
 		newMessageID := send(p.Product)
-		messageResponseLogs.Save(newMessageID, p)
+
 		amazonProductCache.Save(cacheID, p.Product)
 
-		//In Dev mode we save every product we parse
-		if devMode {
-			PrintMemUsage()
-			go logProductParams(p)
-		}
+		newLogID := uuid.New().String()
+		cachedUrlsToLogMap[cacheID] = newLogID
+		messageToLogMap[newMessageID] = newLogID
+
+		tmpSavePath := fmt.Sprintf(amazonLogTmpPath, newLogID)
+		amazonscraper.CreateTestDataOnProduct(tmpSavePath, p)
 	})
 
 	startingRequest, _ := http.NewRequest("GET", link, nil)

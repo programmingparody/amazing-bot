@@ -5,3 +5,5 @@ url_logs/*
 run.sh
 /tmp
 storage/
+.DS_STORE
+*.log

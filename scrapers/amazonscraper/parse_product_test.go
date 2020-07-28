@@ -49,6 +49,9 @@ func TestParseProduct(t *testing.T) {
 
 	for _, file := range files {
 		name := file.Name()
+		if len(name) < 5 {
+			continue
+		}
 		extension := name[len(name)-5:]
 		if file.IsDir() || extension != ".json" {
 			continue

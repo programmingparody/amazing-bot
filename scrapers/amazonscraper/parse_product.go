@@ -97,7 +97,6 @@ func (pp *ParseProduct) Step(params scrapers.HTTPStepParameters) (scrapers.HTTPS
 
 		productTitle = productElement.Text()
 	}
-	productTitle, _ = url.QueryUnescape(productTitle)
 
 	priceElement, _ := findFallback(document, "#price_inside_buybox", "#priceblock_ourprice")
 	priceText := priceElement.First().Text()
@@ -106,10 +105,10 @@ func (pp *ParseProduct) Step(params scrapers.HTTPStepParameters) (scrapers.HTTPS
 	originalPriceElement, _ := findFallback(document, "span.priceBlockStrikePriceString.a-text-strike")
 	originalPrice := float32(numbersFromStringFallback(originalPriceElement.Text(), 0)[0])
 
-	outOfStockElement, found := findFallback(document, `#almOutOfStockAvailability_feature_div`)
+	outOfStockElement, found := findFallback(document, `#almOutOfStockAvailability_feature_div`, `#availability > span`)
 	outOfStock := false
 	outOfStockText := strings.Trim(outOfStockElement.Text(), " \n")
-	if found && len(outOfStockText) > 0 {
+	if found && len(outOfStockText) > 0 && outOfStockText == "Currently unavailable." {
 		outOfStock = true
 	}
 
