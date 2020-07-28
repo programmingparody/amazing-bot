@@ -66,5 +66,6 @@ func (hr *HTTPRoutine) Run(initialParameters HTTPStepParameters) (error, *Routin
 			return currentError, &step
 		}
 	}
+
 	return nil, nil
 }

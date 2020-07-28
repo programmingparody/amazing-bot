@@ -19,19 +19,32 @@ var referralTag string
 var devMode bool
 var amazonLogPath string
 
+//Keep track of messages that we've responded to
+//Used for when a problem reaction comes in so we can create a test object for it
+var messageResponseLogs *MemoryStorage
+
+var amazonProductCache AmazonProductRepository
+
 func main() {
+	//Environment variables
 	botToken = os.Getenv("BOT_TOKEN")
 	referralTag = os.Getenv("AMZN_TAG")
-	devMode = len(os.Getenv("DEV")) > 0
+	devMode = os.Getenv("DEV") == "TRUE"
 	amazonLogPath = os.Getenv("AMZN_PRODUCT_LOG_PATH")
 	fmt.Printf("Starting Bot\nBot Token: %v\nReferral Tag: %v\nDev Mode:%v\nAmazon Product Log Path:%v\n\n", botToken, referralTag, devMode, amazonLogPath)
 
+	//Discord Session
 	discordSession, _ := discordgo.New(botToken)
 	if err := discordSession.Open(); err != nil {
 		panic(err)
 	}
-	NewDiscordChatAppSession(discordSession).OnMessage(onMessage)
 	defer discordSession.Close()
+
+	//Setup product repositories
+	messageResponseLogs = NewMemoryStorage()
+	amazonProductCache = &MemoryStorageToRepositoryAdapter{NewMemoryStorage()}
+
+	hookAmazonChatBotToSession(NewDiscordChatAppSession(discordSession), fetchProduct, onProblemReport)
 
 	//Code for closing the program (Ctrl+C)
 	sc := make(chan os.Signal, 1)
@@ -39,13 +52,46 @@ func main() {
 	<-sc
 }
 
-func log(e interface{}) {
-	fmt.Printf("Log: %v\n", e)
+func logProductParams(p amazonscraper.OnProductParams) {
+	amazonscraper.CreateTestDataOnProduct(fmt.Sprintf(amazonLogPath, time.Now().String()), p)
 }
 
-func fetchProduct(link string, c chan amazonscraper.OnProductParams) {
+func onProblemReport(cas ChatAppSession, messageID string) {
+	data, error := messageResponseLogs.Get(messageID)
+	if error != nil {
+		return
+	}
+	params := data.(amazonscraper.OnProductParams)
+	go logProductParams(params)
+}
+
+func fetchProduct(link string, send SendProduct) {
+	url, error := url.Parse(link)
+	if error != nil {
+		return
+	}
+	cacheID := fmt.Sprintf("%v://%v%v", url.Scheme, url.Host, url.Path)
+	fmt.Printf("Normalized Product: %v\n", cacheID)
+
+	cachedProduct, error := amazonProductCache.Get(cacheID)
+	if cachedProduct != nil && error == nil {
+		fmt.Printf("Sending Cached Product\n")
+		send(cachedProduct)
+		return
+	}
+
 	amazonScraper := amazonscraper.NewSimpleProductScraperRoutine(func(p amazonscraper.OnProductParams) {
-		c <- p
+		fmt.Printf("Sending Fetched Product\n")
+		p.Product.URL = amazonscraper.WithPromoCode(p.Product.URL, referralTag)
+		newMessageID := send(p.Product)
+		messageResponseLogs.Save(newMessageID, p)
+		amazonProductCache.Save(cacheID, p.Product)
+
+		//In Dev mode we save every product we parse
+		if devMode {
+			PrintMemUsage()
+			go logProductParams(p)
+		}
 	})
 
 	startingRequest, _ := http.NewRequest("GET", link, nil)
@@ -53,38 +99,4 @@ func fetchProduct(link string, c chan amazonscraper.OnProductParams) {
 	go amazonScraper.Run(scrapers.HTTPStepParameters{
 		Request: startingRequest,
 	})
-}
-
-func onMessage(c ChatAppSession, m *Message) {
-	// Ignore all messages created by the bot
-	if m.MessageIsFromThisBot {
-		return
-	}
-
-	amazonLinks := amazonscraper.ExtractManyAmazonProductLinkFromString(m.Content)
-
-	if len(amazonLinks) == 0 {
-		return
-	}
-	productParamsChannel := make(chan amazonscraper.OnProductParams)
-	for _, link := range amazonLinks {
-		fetchProduct(link, productParamsChannel)
-
-		p := <-productParamsChannel
-		_, wholeMessageAsURLError := url.Parse(m.Content)
-		if wholeMessageAsURLError == nil {
-			go m.Remove()
-		} else {
-			log(wholeMessageAsURLError)
-		}
-		if devMode {
-			go amazonscraper.CreateTestDataOnProduct(fmt.Sprintf(amazonLogPath, time.Now().String()))(p)
-		}
-
-		p.Product.URL = amazonscraper.WithPromoCode(p.Product.URL, referralTag)
-		error := m.RespondWithAmazonProduct(p.Product)
-		if error != nil {
-			log(error)
-		}
-	}
 }

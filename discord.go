@@ -17,23 +17,43 @@ func NewDiscordChatAppSession(s *discordgo.Session) *DiscordBot {
 	}
 }
 
-func (db *DiscordBot) OnMessage(callback SetOnMessageCallback) error {
-	db.session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		retMessage := Message{}
+func discordMessageID(channelID string, messageID string) string {
+	return fmt.Sprintf("%s|%s", channelID, messageID)
+}
 
-		retMessage.MessageIsFromThisBot = m.Author.ID == s.State.User.ID
-		retMessage.Content = m.Content
-
-		retMessage.Remove = func() error {
+func createMessageFromDiscordMessage(s *discordgo.Session, m *discordgo.Message) *Message {
+	return &Message{
+		MessageIsFromThisBot: m.Author.ID == s.State.User.ID,
+		Content:              m.Content,
+		ID:                   discordMessageID(m.ChannelID, m.ID),
+		Remove: func() error {
 			error := s.ChannelMessageDelete(m.ChannelID, m.ID)
 			return error
-		}
-		retMessage.RespondWithAmazonProduct = func(p *amazonscraper.Product) error {
+		},
+		RespondWithAmazonProduct: func(p *amazonscraper.Product) (string, error) {
 			embed := toEmbed(p)
-			_, error := s.ChannelMessageSendEmbed(m.ChannelID, embed)
-			return error
+			m, error := s.ChannelMessageSendEmbed(m.ChannelID, embed)
+			return discordMessageID(m.ChannelID, m.ID), error
+		},
+	}
+}
+
+func (db *DiscordBot) isProblemReaction(e discordgo.Emoji) bool {
+	return true
+}
+
+func (db *DiscordBot) OnProductProblemReport(cb OnProductProblemReportCallback) error {
+	db.session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageReactionAdd) {
+		if db.isProblemReaction(m.Emoji) {
+			cb(db, discordMessageID(m.ChannelID, m.MessageID))
 		}
-		callback(db, &retMessage)
+	})
+	return nil
+}
+
+func (db *DiscordBot) OnMessage(cb OnMessageCallback) error {
+	db.session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		cb(db, createMessageFromDiscordMessage(s, m.Message))
 	})
 	return nil
 }

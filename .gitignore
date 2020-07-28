@@ -4,3 +4,4 @@ url_logs/*
 /logs/*
 run.sh
 /tmp
+storage/

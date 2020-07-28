@@ -4,14 +4,18 @@ import (
 	"wishlist-bot/scrapers/amazonscraper"
 )
 
-type SetOnMessageCallback func(ChatAppSession, *Message)
+type OnMessageCallback func(ChatAppSession, *Message)
+type OnProductProblemReportCallback func(cas ChatAppSession, messageID string)
+
 type ChatAppSession interface {
-	OnMessage(SetOnMessageCallback) error
+	OnMessage(OnMessageCallback) error
+	OnProductProblemReport(OnProductProblemReportCallback) error
 }
 
 type Message struct {
+	ID                       string
 	Content                  string
 	MessageIsFromThisBot     bool
 	Remove                   func() error
-	RespondWithAmazonProduct func(*amazonscraper.Product) error
+	RespondWithAmazonProduct func(*amazonscraper.Product) (newMessageID string, e error)
 }
