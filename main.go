@@ -16,7 +16,8 @@ import (
 
 //Environment variables
 
-var botToken string
+var discordBotToken string
+var slackBotToken string
 var referralTag string
 var devMode bool
 var amazonLogPath string
@@ -24,6 +25,7 @@ var amazonLogTmpPath string
 
 //More globals
 //TODO: Don't use globals lol
+//These globals can be encapsulated to a higher order class to contain repo/cache interfaces
 
 var amazonProductCache AmazonProductRepository
 var cachedUrlsToLogMap map[string]string
@@ -32,12 +34,13 @@ var messageToLogMap map[string]string
 func main() {
 	//Set Environment variables
 
-	botToken = os.Getenv("BOT_TOKEN")
+	discordBotToken = os.Getenv("DISCORD_BOT_TOKEN")
+	slackBotToken = os.Getenv("SLACK_BOT_TOKEN")
 	referralTag = os.Getenv("AMZN_TAG")
 	devMode = os.Getenv("DEV") == "TRUE"
 	amazonLogPath = os.Getenv("AMZN_PRODUCT_LOG_PATH")
 	amazonLogTmpPath = os.Getenv("AMZN_PRODUCT_LOG_TMP_PATH")
-	fmt.Printf("Starting Bot\nBot Token: %v\nReferral Tag: %v\nDev Mode:%v\nAmazon Product Log Path:%v\n\n", botToken, referralTag, devMode, amazonLogPath)
+	fmt.Printf("Starting Bot\nDiscord Bot Token: %v\nReferral Tag: %v\nDev Mode:%v\nAmazon Product Log Path:%v\n\n", discordBotToken, referralTag, devMode, amazonLogPath)
 
 	//Initialize Globals
 
@@ -45,17 +48,21 @@ func main() {
 	cachedUrlsToLogMap = make(map[string]string)
 	messageToLogMap = make(map[string]string)
 
-	//Discord session setup
+	//Bot session setup
 
-	discordSession, _ := discordgo.New(botToken)
+	discordSession, _ := discordgo.New(discordBotToken)
 	if err := discordSession.Open(); err != nil {
 		panic(err)
 	}
 	defer discordSession.Close()
 
+	slackBot := newSlackChatBot(slackBotToken)
+	go slackBot.Start(":6969")
+
 	//Add amazon chatbot logic
 
 	hookAmazonChatBotToSession(NewDiscordChatAppSession(discordSession), fetchProduct, onProblemReport)
+	hookAmazonChatBotToSession(slackBot, fetchProduct, onProblemReport)
 
 	//Code for closing the program (Ctrl+C)
 
@@ -73,6 +80,7 @@ func getLogIDFromMessage(messageID string) string {
 	return messageToLogMap[messageID]
 }
 
+//onProblemReport when a user reacts with a negative emoji (reporting the reply of the bot)
 func onProblemReport(cas ChatAppSession, messageID string) {
 	logID := getLogIDFromMessage(messageID)
 	if len(logID) == 0 {
@@ -84,6 +92,7 @@ func onProblemReport(cas ChatAppSession, messageID string) {
 	os.Rename(fmt.Sprintf(amazonLogTmpPath+".html", logID), fmt.Sprintf(amazonLogPath+".html", logID))
 }
 
+//fetchProduct and send it back to the chatbot to deliver to channels/chat servers
 func fetchProduct(link string, send SendProduct) {
 	if devMode {
 		PrintMemUsage()
