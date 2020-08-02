@@ -23,6 +23,7 @@ type masterFetcher struct {
 	ReportHandler        func(product *chatapp.Product, html []byte) //Called when a product is reported
 	MessageIDProductRepo ProductRepo                                 //Keeps track of products we've respond incase it's reported
 	HTMLStorage          byteStorage                                 //Keeps track of HTTP body responses for logging when reported
+	ProductModifier      func(*chatapp.Product)                      //Called before sending a product. Useful for adding a referral code
 	ErrorHandler         func(error)
 }
 
@@ -74,6 +75,10 @@ func (m *masterFetcher) Fetch(url *url.URL) (*chatapp.Product, error) {
 		m.ErrorHandler(error)
 	}
 	product := amazonToChatAppProduct(url, amazonProduct)
+
+	if m.ProductModifier != nil {
+		m.ProductModifier(&product)
+	}
 
 	m.ProductStorage.Save(id, &product)
 

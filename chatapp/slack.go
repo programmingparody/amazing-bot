@@ -11,15 +11,18 @@ import (
 	"text/template"
 )
 
-type SlackMessageActions struct {
+type slackMessageActions struct {
 	event *slackEvent
 	slack *Slack
 }
 
-func (a *SlackMessageActions) Remove() error {
+//Remove implementation for Actions
+func (a *slackMessageActions) Remove() error {
 	return nil
 }
-func (a *SlackMessageActions) RespondWithProduct(p *Product) (string, error) {
+
+//RespondWithProduct implementation for Actions
+func (a *slackMessageActions) RespondWithProduct(p *Product) (string, error) {
 	e := a.event
 	s := a.slack
 
@@ -31,9 +34,12 @@ func (a *SlackMessageActions) RespondWithProduct(p *Product) (string, error) {
 
 	resData, _ := ioutil.ReadAll(res.Body)
 	defer res.Body.Close()
-	fmt.Println(string(resData))
+
+	var responseMessage slackEventMessageContainer
+	json.Unmarshal(resData, &responseMessage)
+	fmt.Println(responseMessage)
 	//TODO: Return new message id
-	return "", nil
+	return responseMessage.Event.TimeStamp, nil
 }
 
 type slackEvent struct {
@@ -47,20 +53,22 @@ type slackEvent struct {
 			Elements []struct {
 				Type string `json:"type"`
 				Text string `json:"text"`
-				Url  string `json"url"`
+				URL  string `json:"url"`
 			} `json:"Elements"`
 		} `json:"Elements"`
 	} `json:"blocks"`
 	ChannelID string `json:"channel"`
-	TimeStamp string `json"ts"`
+	TimeStamp string `json:"ts"`
 }
 
 type slackEventMessageContainer struct {
-	Token string     `json:"token"`
-	Event slackEvent `json:"event"`
+	Channel   string     `json:"channel"`
+	TimeStamp string     `json:"ts"`
+	Token     string     `json:"token"`
+	Event     slackEvent `json:"event"`
 }
 
-func ParseEventMessage(reader io.ReadCloser) (*slackEventMessageContainer, error) {
+func parseEventMessage(reader io.ReadCloser) (*slackEventMessageContainer, error) {
 	message := slackEventMessageContainer{}
 	data, error := ioutil.ReadAll(reader)
 	if error == nil {
@@ -77,7 +85,7 @@ const (
 
 type slackEventHandlerFunc func(e *slackEventMessageContainer, w http.ResponseWriter, r *http.Request)
 
-//Slack Session
+//Slack Session implementation
 type Slack struct {
 	typeToHandler map[string][]slackEventHandlerFunc
 	token         string
@@ -93,7 +101,7 @@ func NewSlackSession(token string) *Slack {
 	}
 }
 
-func slackRichTextJSONFromProduct(channelId string, p *Product) string {
+func slackRichTextJSONFromProduct(channelID string, p *Product) string {
 	funcMap := template.FuncMap{
 		"url": func(p *Product) string {
 			return p.URL.String()
@@ -121,6 +129,8 @@ func slackRichTextJSONFromProduct(channelId string, p *Product) string {
 			return input
 		},
 	}
+	//WARNING: Building JSON this way is at risk of failing randomly and cause validation errors at runtime
+	//TODO: Create an anonymous struct to represent this instead, and use json.Marshal
 	blocksTemplate, _ := template.New("blocks").Funcs(funcMap).Parse(`
 	"blocks": [
 		{
@@ -182,11 +192,12 @@ func slackRichTextJSONFromProduct(channelId string, p *Product) string {
 	{
 		"channel": "%s",
 		%s
-	}`, channelId, buffer.String())
+	}`, channelID, buffer.String())
 
 	return fullJSONString
 }
 
+//OnMessage implements Session
 func (s *Slack) OnMessage(cb OnMessageCallback) error {
 	temp := s.typeToHandler[slackeventMessage]
 	s.typeToHandler[slackeventMessage] = append(temp, func(emc *slackEventMessageContainer, w http.ResponseWriter, r *http.Request) {
@@ -196,9 +207,9 @@ func (s *Slack) OnMessage(cb OnMessageCallback) error {
 				for _, element := range parentElement.Elements {
 					cb(s, &Message{
 						ID:                   e.ClientMessageID,
-						Content:              element.Url,
+						Content:              element.URL,
 						MessageIsFromThisBot: false,
-						Actions: &SlackMessageActions{
+						Actions: &slackMessageActions{
 							event: &e,
 							slack: s,
 						},
@@ -210,6 +221,7 @@ func (s *Slack) OnMessage(cb OnMessageCallback) error {
 	return nil
 }
 
+//OnProductProblemReport implements Session
 func (s *Slack) OnProductProblemReport(OnProductProblemReportCallback) error {
 	return nil
 }
@@ -220,15 +232,15 @@ func (s *Slack) Start(port string) {
 }
 
 //ServeHTTP to implement http.Handler
-func (eh *Slack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	message, error := ParseEventMessage(r.Body)
+func (s *Slack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	message, error := parseEventMessage(r.Body)
 
 	if error != nil {
 		fmt.Println(error)
 		return
 	}
 
-	handlers := eh.typeToHandler[message.Event.Type]
+	handlers := s.typeToHandler[message.Event.Type]
 
 	if handlers != nil {
 		for _, h := range handlers {

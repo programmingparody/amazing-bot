@@ -5,7 +5,7 @@ import (
 	"unicode"
 )
 
-//Takes all numbers from a string and returns a slice of floats
+//NumbersFromString Takes all numbers from a string and returns a slice of floats
 func NumbersFromString(input string) (numbers []float64) {
 	resultString := ""
 

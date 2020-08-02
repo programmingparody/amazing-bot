@@ -6,22 +6,26 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+//Discord Session implementation
 type Discord struct {
 	session      *discordgo.Session
 	problemEmoji string
 }
 
-type DiscordMessageActions struct {
+type discordMessageActions struct {
 	session *discordgo.Session
 	message *discordgo.Message
 	discord *Discord
 }
 
-func (a *DiscordMessageActions) Remove() error {
+//Remove implementation for Actions
+func (a *discordMessageActions) Remove() error {
 	error := a.session.ChannelMessageDelete(a.message.ChannelID, a.message.ID)
 	return error
 }
-func (a *DiscordMessageActions) RespondWithProduct(p *Product) (string, error) {
+
+//RespondWithProduct implementation for Actions
+func (a *discordMessageActions) RespondWithProduct(p *Product) (string, error) {
 	embed := a.discord.toEmbed(p)
 	m, error := a.session.ChannelMessageSendEmbed(a.message.ChannelID, embed)
 	a.session.MessageReactionAdd(m.ChannelID, m.ID, a.discord.problemEmoji)
@@ -31,6 +35,7 @@ func (a *DiscordMessageActions) RespondWithProduct(p *Product) (string, error) {
 	return discordMessageToID(m.ChannelID, m.ID), error
 }
 
+//NewDiscordSession to setup hooks to events
 func NewDiscordSession(s *discordgo.Session) *Discord {
 	return &Discord{
 		session:      s,
@@ -47,7 +52,7 @@ func (db *Discord) createMessageFromDiscordMessage(s *discordgo.Session, m *disc
 		MessageIsFromThisBot: m.Author.ID == s.State.User.ID,
 		Content:              m.Content,
 		ID:                   discordMessageToID(m.ChannelID, m.ID),
-		Actions: &DiscordMessageActions{
+		Actions: &discordMessageActions{
 			session: db.session,
 			discord: db,
 			message: m,
@@ -59,6 +64,7 @@ func (db *Discord) isProblemReaction(m *discordgo.MessageReaction) bool {
 	return m.Emoji.Name == db.problemEmoji
 }
 
+//OnProductProblemReport implements Session
 func (db *Discord) OnProductProblemReport(cb OnProductProblemReportCallback) error {
 	db.session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageReactionAdd) {
 		if m.UserID == s.State.User.ID {
@@ -71,6 +77,7 @@ func (db *Discord) OnProductProblemReport(cb OnProductProblemReportCallback) err
 	return nil
 }
 
+//OnMessage implements Session
 func (db *Discord) OnMessage(cb OnMessageCallback) error {
 	db.session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		cb(db, db.createMessageFromDiscordMessage(s, m.Message))

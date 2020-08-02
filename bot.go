@@ -6,7 +6,13 @@ import (
 	"wishlist-bot/scrapers/amazonscraper"
 )
 
-//AmazingBot listens for Amazon URLs and reponds with a Product
+/*AmazingBot Chat Bot for Discord / Slack (Maybe Zoom soon)
+Usage:
+	Hook into chatapp sessions and set up listeners/handlers for Reports and Messages
+	When a message comes through, check for Amazon links
+	Valid Amazon links are ran through a Fetcher
+	Successful responses from Fetcher are sent back to the chat using RespondWithProduct
+*/
 type AmazingBot struct {
 	Fetcher            ProductFetcher
 	ProductSentHandler func(e *SentProductEvent)
@@ -36,10 +42,6 @@ func (ab *AmazingBot) createOnReport() func(c chatapp.Session, m *chatapp.Messag
 		ab.handleMessage(c, m)
 	}
 }
-
-// FetchProductFunc is a call signature that takes a link and callbacks with product params
-type FetchProductFunc func(link string, send SendProduct)
-type SendProduct func(*amazonscraper.Product) (messageID string)
 
 func (ab *AmazingBot) handleMessage(c chatapp.Session, m *chatapp.Message) {
 	// Ignore all messages created by the bot

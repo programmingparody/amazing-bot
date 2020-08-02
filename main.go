@@ -19,7 +19,7 @@ import (
 
 var discordBotToken string
 var slackBotToken string
-var referralTag string
+var amazonReferralTag string
 var devMode bool
 var reportDataPath string
 var htmlStoragePath string
@@ -29,21 +29,25 @@ func main() {
 
 	discordBotToken = os.Getenv("DISCORD_BOT_TOKEN")
 	slackBotToken = os.Getenv("SLACK_BOT_TOKEN")
-	referralTag = os.Getenv("AMZN_TAG")
+	amazonReferralTag = os.Getenv("AMZN_REFERRAL_TAG")
 	devMode = os.Getenv("DEV") == "TRUE"
-	reportDataPath = os.Getenv("AMZN_PRODUCT_LOG_PATH")
-	htmlStoragePath = os.Getenv("AMZN_PRODUCT_LOG_TMP_PATH")
+	reportDataPath = os.Getenv("REPORT_PATH")
+	htmlStoragePath = os.Getenv("HTML_STORAGE_PATH")
 
 	fmt.Printf(`
-	Starting Bot
+	========================
+	Amazing Chat Bot Started
+	------------------------
 	Discord Bot Token: %v
-	Referral Tag: %v
+	Amazon Referral Tag: %v
 	Dev Mode:%v
 	HTML Storage Path:%v
 	Reported Products Path: %v
+	========================
+
 	`,
 		discordBotToken,
-		referralTag,
+		amazonReferralTag,
 		devMode,
 		htmlStoragePath,
 		reportDataPath)
@@ -63,11 +67,14 @@ func main() {
 
 	masterFetcher := masterFetcher{
 		Fetcher:              HTTPFetcher{},
-		ProductStorage:       NewCacheRepo(time.Second * 5),
-		MessageIDProductRepo: NewCacheRepo(time.Second * 5),
+		ProductStorage:       newCacheRepo(time.Second * 5),
+		MessageIDProductRepo: newCacheRepo(time.Second * 5),
 		HTMLStorage:          &fileStorage{Extension: "html"},
 		ReportHandler:        onReport,
 		ErrorHandler:         logError,
+		ProductModifier: func(p *chatapp.Product) {
+			applyPromoCode(p.URL, amazonReferralTag)
+		},
 	}
 	amazingBot := AmazingBot{
 		Fetcher:            &masterFetcher,
@@ -84,11 +91,10 @@ func main() {
 	<-sc
 }
 
-func WithPromoCode(URL url.URL, tag string) url.URL {
+func applyPromoCode(URL *url.URL, tag string) {
 	query, _ := url.ParseQuery(URL.RawQuery)
 	query.Set("tag", tag)
 	URL.RawQuery = query.Encode()
-	return URL
 }
 
 type fileStorage struct {

@@ -5,7 +5,7 @@ import (
 	"runtime"
 )
 
-//Source: https://golangcode.com/print-the-current-memory-usage/
+//PrintMemUsage Source: https://golangcode.com/print-the-current-memory-usage/
 //My memory usage went from 0-100% real quick - Drizzy
 func PrintMemUsage() {
 	var m runtime.MemStats

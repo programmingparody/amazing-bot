@@ -1,5 +1,8 @@
 #!/bin/bash
-BOT_TOKEN="<YOUR-DISCORD-BOT-TOKEN>" \
-AMZN_PRODUCT_LOG_PATH="$(pwd)/logs/product_logs/" \
-DEV="TRUE" `#remove this line or change "TRUE" to "" to disable dev mode#` \
+DISCORD_BOT_TOKEN="Bot {{Token}}" \
+SLACK_BOT_TOKEN="xoxb-{{Token}}" \
+AMZN_REFERRAL_TAG="{{Amazon affiliate tag}}" \
+HTML_STORAGE_PATH="$(pwd)/logs/product_logs/html" \
+REPORT_PATH="$(pwd)/logs/product_logs/reports" \
+DEV="TRUE" `#"FALSE" to disable dev mode` \
 go run .

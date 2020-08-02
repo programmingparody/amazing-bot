@@ -6,6 +6,7 @@ import (
 	"wishlist-bot/chatapp"
 )
 
+//ProductRepo stores (Save) and retrieves (Get) chatapp.Product instances
 type ProductRepo interface {
 	Save(id string, p *chatapp.Product) error
 	Get(id string) (*chatapp.Product, error)
@@ -15,19 +16,19 @@ type cacheItem struct {
 	ts      time.Time
 	product *chatapp.Product
 }
-type CacheRepo struct {
+type cacheRepo struct {
 	duration time.Duration
 	storage  map[string]*cacheItem
 }
 
-func NewCacheRepo(itemDuration time.Duration) *CacheRepo {
-	return &CacheRepo{
+func newCacheRepo(itemDuration time.Duration) *cacheRepo {
+	return &cacheRepo{
 		duration: itemDuration,
 		storage:  make(map[string]*cacheItem),
 	}
 }
 
-func (r *CacheRepo) Save(id string, p *chatapp.Product) error {
+func (r *cacheRepo) Save(id string, p *chatapp.Product) error {
 	r.storage[id] = &cacheItem{
 		product: p,
 		ts:      time.Now(),
@@ -35,7 +36,7 @@ func (r *CacheRepo) Save(id string, p *chatapp.Product) error {
 	return nil
 }
 
-func (r *CacheRepo) Get(id string) (*chatapp.Product, error) {
+func (r *cacheRepo) Get(id string) (*chatapp.Product, error) {
 	item := r.storage[id]
 	if item == nil {
 		return nil, fmt.Errorf("[CacheRepo] ID not found: %s", id)
