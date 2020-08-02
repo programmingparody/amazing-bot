@@ -1,4 +1,4 @@
-package main
+package chatapp
 
 import (
 	"bytes"
@@ -9,10 +9,34 @@ import (
 	"net/http"
 	"strings"
 	"text/template"
-	"wishlist-bot/scrapers/amazonscraper"
 )
 
-type SlackEvent struct {
+type SlackMessageActions struct {
+	event *slackEvent
+	slack *Slack
+}
+
+func (a *SlackMessageActions) Remove() error {
+	return nil
+}
+func (a *SlackMessageActions) RespondWithProduct(p *Product) (string, error) {
+	e := a.event
+	s := a.slack
+
+	data := slackRichTextJSONFromProduct(e.ChannelID, p)
+	req, _ := http.NewRequest("POST", "https://slack.com/api/chat.postMessage", bytes.NewBuffer([]byte(data)))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", s.token))
+	req.Header.Add("Content-type", "application/json")
+	res, _ := http.DefaultClient.Do(req)
+
+	resData, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+	fmt.Println(string(resData))
+	//TODO: Return new message id
+	return "", nil
+}
+
+type slackEvent struct {
 	Type            string `json:"type"`
 	Text            string `json:"text"`
 	UserID          string `json:"user"`
@@ -31,13 +55,13 @@ type SlackEvent struct {
 	TimeStamp string `json"ts"`
 }
 
-type SlackEventMessageContainer struct {
+type slackEventMessageContainer struct {
 	Token string     `json:"token"`
-	Event SlackEvent `json:"event"`
+	Event slackEvent `json:"event"`
 }
 
-func ParseEventMessage(reader io.ReadCloser) (*SlackEventMessageContainer, error) {
-	message := SlackEventMessageContainer{}
+func ParseEventMessage(reader io.ReadCloser) (*slackEventMessageContainer, error) {
+	message := slackEventMessageContainer{}
 	data, error := ioutil.ReadAll(reader)
 	if error == nil {
 		defer reader.Close()
@@ -51,31 +75,33 @@ const (
 	slackeventMessage = "message"
 )
 
-type slackEventHandlerFunc func(e *SlackEventMessageContainer, w http.ResponseWriter, r *http.Request)
-type SlackChatBot struct {
+type slackEventHandlerFunc func(e *slackEventMessageContainer, w http.ResponseWriter, r *http.Request)
+
+//Slack Session
+type Slack struct {
 	typeToHandler map[string][]slackEventHandlerFunc
 	token         string
 }
 
-func newSlackChatBot(token string) *SlackChatBot {
+//NewSlackSession returns a Slack session that implements chatapp.Session
+func NewSlackSession(token string) *Slack {
 	handlers := make(map[string][]slackEventHandlerFunc)
 	handlers[slackeventMessage] = []slackEventHandlerFunc{}
-	return &SlackChatBot{
+	return &Slack{
 		typeToHandler: handlers,
 		token:         token,
 	}
 }
 
-func slackRichTextJsonFromProduct(channelId string, p *amazonscraper.Product) string {
-
+func slackRichTextJSONFromProduct(channelId string, p *Product) string {
 	funcMap := template.FuncMap{
-		"url": func(p *amazonscraper.Product) string {
+		"url": func(p *Product) string {
 			return p.URL.String()
 		},
 		"escape": func(s string) string {
 			return strings.ReplaceAll(s, `"`, `\"`)
 		},
-		"price": func(p *amazonscraper.Product) string {
+		"price": func(p *Product) string {
 			if p.OriginalPrice > 0 {
 				savings := p.OriginalPrice - p.Price
 				percentOff := savings / p.OriginalPrice * 100
@@ -83,7 +109,7 @@ func slackRichTextJsonFromProduct(channelId string, p *amazonscraper.Product) st
 			}
 			return fmt.Sprintf("%.2f", p.Price)
 		},
-		"rating": func(p *amazonscraper.Product) string {
+		"rating": func(p *Product) string {
 			return fmt.Sprintf("%.1f", p.Rating)
 		},
 		"cutoff": func(input string) string {
@@ -161,9 +187,9 @@ func slackRichTextJsonFromProduct(channelId string, p *amazonscraper.Product) st
 	return fullJSONString
 }
 
-func (s *SlackChatBot) OnMessage(cb OnMessageCallback) error {
+func (s *Slack) OnMessage(cb OnMessageCallback) error {
 	temp := s.typeToHandler[slackeventMessage]
-	s.typeToHandler[slackeventMessage] = append(temp, func(emc *SlackEventMessageContainer, w http.ResponseWriter, r *http.Request) {
+	s.typeToHandler[slackeventMessage] = append(temp, func(emc *slackEventMessageContainer, w http.ResponseWriter, r *http.Request) {
 		e := emc.Event
 		for _, b := range e.Blocks {
 			for _, parentElement := range b.Elements {
@@ -172,20 +198,9 @@ func (s *SlackChatBot) OnMessage(cb OnMessageCallback) error {
 						ID:                   e.ClientMessageID,
 						Content:              element.Url,
 						MessageIsFromThisBot: false,
-						Remove: func() error {
-							return nil
-						},
-						RespondWithAmazonProduct: func(p *amazonscraper.Product) (string, error) {
-							data := slackRichTextJsonFromProduct(e.ChannelID, p)
-							req, _ := http.NewRequest("POST", "https://slack.com/api/chat.postMessage", bytes.NewBuffer([]byte(data)))
-							req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", s.token))
-							req.Header.Add("Content-type", "application/json")
-							res, _ := http.DefaultClient.Do(req)
-
-							resData, _ := ioutil.ReadAll(res.Body)
-							defer res.Body.Close()
-							fmt.Println(string(resData))
-							return "", nil
+						Actions: &SlackMessageActions{
+							event: &e,
+							slack: s,
 						},
 					})
 				}
@@ -195,17 +210,17 @@ func (s *SlackChatBot) OnMessage(cb OnMessageCallback) error {
 	return nil
 }
 
-func (s *SlackChatBot) OnProductProblemReport(OnProductProblemReportCallback) error {
+func (s *Slack) OnProductProblemReport(OnProductProblemReportCallback) error {
 	return nil
 }
 
 //Start an HTTP server and listen for Slack events
-func (eh *SlackChatBot) Start(port string) {
-	http.ListenAndServe(port, eh)
+func (s *Slack) Start(port string) {
+	http.ListenAndServe(port, s)
 }
 
 //ServeHTTP to implement http.Handler
-func (eh *SlackChatBot) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (eh *Slack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	message, error := ParseEventMessage(r.Body)
 
 	if error != nil {
@@ -220,10 +235,4 @@ func (eh *SlackChatBot) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h(message, w, r)
 		}
 	}
-}
-
-//Event handlers
-
-func handleSlackMessage(emc *SlackEventMessageContainer, w http.ResponseWriter, r *http.Request) {
-
 }

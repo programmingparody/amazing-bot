@@ -5,12 +5,12 @@ import (
 	"strings"
 )
 
-func ExtractManyAmazonProductLinkFromString(s string) []string {
+func ExtractManyProductLinkFromString(s string) []string {
 	lines := strings.Split(s, "\n")
 	result := []string{}
 
 	for _, line := range lines {
-		link, success := ExtractOneAmazonProductLinkFromString(line)
+		link, success := ExtractOneProductLinkFromString(line)
 		if !success {
 			continue
 		}
@@ -20,14 +20,14 @@ func ExtractManyAmazonProductLinkFromString(s string) []string {
 	return result
 }
 
-func ExtractOneAmazonProductLinkFromString(s string) (link string, found bool) {
+func ExtractOneProductLinkFromString(s string) (link string, found bool) {
 	regex, _ := regexp.Compile(`(http[s]?:\/\/)?(www\.)?amazon\..*\/.*(dp|gp)\/\S*`)
 	link = regex.FindString(s)
 	found = len(link) > 0
 	return link, found
 }
 
-func IsAmazonProductLink(s string) bool {
-	_, result := ExtractOneAmazonProductLinkFromString(s)
+func IsProductLink(s string) bool {
+	_, result := ExtractOneProductLinkFromString(s)
 	return result
 }

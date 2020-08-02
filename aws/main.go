@@ -22,9 +22,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
-	"wishlist-bot/scrapers"
 	"wishlist-bot/scrapers/amazonscraper"
 
 	"github.com/aws/aws-lambda-go/lambda"
@@ -36,39 +36,44 @@ type Event struct {
 	Auth string `json:"auth"`
 }
 
-type fetchCallback func(amazonscraper.OnProductParams)
-
 func HandleRequest(ctx context.Context, e Event) (string, error) {
 	auth := os.Getenv("AUTH_KEY")
 	if auth != e.Auth {
 		return "", fmt.Errorf("Permission Denied")
 	}
 
-	c := make(chan amazonscraper.OnProductParams)
+	if !amazonscraper.IsProductLink(e.URL) {
+		return "", fmt.Errorf("Not a valid Amazon Product URL")
+	}
 
-	go fetchProduct(e.URL, c)
-	p := <-c
+	request, _ := http.NewRequest("GET", e.URL, nil)
+	request.Header.Add("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36")
+
+	response, error := http.DefaultClient.Do(request)
+
+	if error != nil {
+		return "", error
+	}
+	defer response.Body.Close()
+	html, error := ioutil.ReadAll(response.Body)
+
+	if error != nil {
+		return "", error
+	}
+
+	amazonProduct, error := amazonscraper.ParseProductHTML(html)
+	if error != nil {
+		return "", error
+	}
 
 	data, error := json.Marshal(struct {
 		Product amazonscraper.Product
 		RawHTML string
 	}{
-		RawHTML: string(p.RawHTML),
-		Product: *p.Product,
+		RawHTML: string(html),
+		Product: *amazonProduct,
 	})
 	return string(data), error
-}
-
-func fetchProduct(link string, c chan amazonscraper.OnProductParams) {
-	amazonScraper := amazonscraper.NewSimpleProductScraperRoutine(func(p amazonscraper.OnProductParams) {
-		c <- p
-	})
-
-	startingRequest, _ := http.NewRequest("GET", link, nil)
-	startingRequest.Header.Add("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36")
-	amazonScraper.Run(scrapers.HTTPStepParameters{
-		Request: startingRequest,
-	})
 }
 
 func main() {

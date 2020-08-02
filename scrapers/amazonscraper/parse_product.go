@@ -1,35 +1,24 @@
 package amazonscraper
 
 import (
+	"bytes"
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"net/url"
 	"strings"
 	"wishlist-bot/scrapers"
 
 	"github.com/PuerkitoBio/goquery"
 )
 
-type OnProductParams struct {
-	Product        *Product
-	StepParameters scrapers.HTTPStepParameters
-	RawHTML        []byte
-}
-type ParseProduct struct {
-	OnProduct func(OnProductParams)
-}
-
+//Product represents a scraped Amazon.com product
 type Product struct {
-	Title         string  `json:"title"`
-	Price         float32 `json:"price"`
-	ImageURL      string  `json:"imageURL"`
-	Description   string  `json:"description"`
-	RatingsCount  uint    `json:"ratingsCount"` //Number of ratings (the amound of people giving a product a star count)
-	Rating        float32 `json:"rating"`       //Rating percentage (0-5, 5 = five star rating, 4.5 would be 4 and half stars)
-	OutOfStock    bool    `json:"outOfStock"`
-	OriginalPrice float32 `json:"originalPrice"`
-	URL           url.URL `json:"url"`
+	Title         string
+	Price         float32
+	ImageURL      string
+	Description   string
+	RatingsCount  uint    //Number of ratings (the amound of people giving a product a star count)
+	Rating        float32 //Rating percentage (0-5, 5 = five star rating, 4.5 would be 4 and half stars)
+	OutOfStock    bool
+	OriginalPrice float32
 }
 
 func findFallback(document *goquery.Document, selectors ...string) (selection *goquery.Selection, found bool) {
@@ -50,20 +39,12 @@ func numbersFromStringFallback(input string, defaultValue float64) []float64 {
 	return append(result, defaultValue)
 }
 
-func (pp *ParseProduct) Step(params scrapers.HTTPStepParameters) (scrapers.HTTPStepParameters, error) {
-	//Error checks
+//ParseProductHTML (html) into a *Product
+func ParseProductHTML(html []byte) (*Product, error) {
 
-	response := params.Response
-	if response == nil {
-		return params, fmt.Errorf("No Reponse")
-	}
-	defer response.Body.Close()
-
-	data, _ := ioutil.ReadAll(response.Body)
-
-	document, error := goquery.NewDocumentFromReader(strings.NewReader(string(data)))
+	document, error := goquery.NewDocumentFromReader(bytes.NewBuffer(html))
 	if error != nil {
-		return params, error
+		return nil, error
 	}
 
 	//Parsing
@@ -114,22 +95,14 @@ func (pp *ParseProduct) Step(params scrapers.HTTPStepParameters) (scrapers.HTTPS
 
 	ratingsCountText := document.Find("#acrCustomerReviewText").First().Text()
 	ratingsText := document.Find("#acrPopover").First().AttrOr("title", "0")
-
-	pp.OnProduct(OnProductParams{
-		Product: &Product{
-			Title:         strings.Trim(productTitle, "\n "),
-			Price:         float32(price),
-			ImageURL:      productImageURL,
-			Description:   strings.Trim(productDescription.Find("p").Text(), "\n "),
-			RatingsCount:  uint(numbersFromStringFallback(ratingsCountText, 0)[0]),
-			Rating:        float32(numbersFromStringFallback(ratingsText, 0)[0]),
-			OutOfStock:    outOfStock,
-			OriginalPrice: originalPrice,
-			URL:           *params.Request.URL,
-		},
-		StepParameters: params,
-		RawHTML:        data,
-	})
-
-	return params, nil
+	return &Product{
+		Title:         strings.Trim(productTitle, "\n "),
+		Price:         float32(price),
+		ImageURL:      productImageURL,
+		Description:   strings.Trim(productDescription.Find("p").Text(), "\n "),
+		RatingsCount:  uint(numbersFromStringFallback(ratingsCountText, 0)[0]),
+		Rating:        float32(numbersFromStringFallback(ratingsText, 0)[0]),
+		OutOfStock:    outOfStock,
+		OriginalPrice: originalPrice,
+	}, nil
 }

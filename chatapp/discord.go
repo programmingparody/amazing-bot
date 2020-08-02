@@ -1,66 +1,77 @@
-package main
+package chatapp
 
 import (
 	"fmt"
-	"wishlist-bot/scrapers/amazonscraper"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-type DiscordBot struct {
+type Discord struct {
 	session      *discordgo.Session
 	problemEmoji string
 }
 
-func NewDiscordChatAppSession(s *discordgo.Session) *DiscordBot {
-	return &DiscordBot{
+type DiscordMessageActions struct {
+	session *discordgo.Session
+	message *discordgo.Message
+	discord *Discord
+}
+
+func (a *DiscordMessageActions) Remove() error {
+	error := a.session.ChannelMessageDelete(a.message.ChannelID, a.message.ID)
+	return error
+}
+func (a *DiscordMessageActions) RespondWithProduct(p *Product) (string, error) {
+	embed := a.discord.toEmbed(p)
+	m, error := a.session.ChannelMessageSendEmbed(a.message.ChannelID, embed)
+	a.session.MessageReactionAdd(m.ChannelID, m.ID, a.discord.problemEmoji)
+	if error != nil {
+		return "", error
+	}
+	return discordMessageToID(m.ChannelID, m.ID), error
+}
+
+func NewDiscordSession(s *discordgo.Session) *Discord {
+	return &Discord{
 		session:      s,
 		problemEmoji: "🇫", //For those on dark themed editors, it's that blue [F] emoji.
 	}
 }
 
-func discordMessageID(channelID string, messageID string) string {
+func discordMessageToID(channelID string, messageID string) string {
 	return fmt.Sprintf("%s-%s", channelID, messageID)
 }
 
-func (db *DiscordBot) createMessageFromDiscordMessage(s *discordgo.Session, m *discordgo.Message) *Message {
+func (db *Discord) createMessageFromDiscordMessage(s *discordgo.Session, m *discordgo.Message) *Message {
 	return &Message{
 		MessageIsFromThisBot: m.Author.ID == s.State.User.ID,
 		Content:              m.Content,
-		ID:                   discordMessageID(m.ChannelID, m.ID),
-		Remove: func() error {
-			error := s.ChannelMessageDelete(m.ChannelID, m.ID)
-			return error
-		},
-		RespondWithAmazonProduct: func(p *amazonscraper.Product) (string, error) {
-			embed := db.toEmbed(p)
-			m, error := s.ChannelMessageSendEmbed(m.ChannelID, embed)
-			s.MessageReactionAdd(m.ChannelID, m.ID, db.problemEmoji)
-			if error != nil {
-				return "", error
-			}
-			return discordMessageID(m.ChannelID, m.ID), error
+		ID:                   discordMessageToID(m.ChannelID, m.ID),
+		Actions: &DiscordMessageActions{
+			session: db.session,
+			discord: db,
+			message: m,
 		},
 	}
 }
 
-func (db *DiscordBot) isProblemReaction(m *discordgo.MessageReaction) bool {
+func (db *Discord) isProblemReaction(m *discordgo.MessageReaction) bool {
 	return m.Emoji.Name == db.problemEmoji
 }
 
-func (db *DiscordBot) OnProductProblemReport(cb OnProductProblemReportCallback) error {
+func (db *Discord) OnProductProblemReport(cb OnProductProblemReportCallback) error {
 	db.session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageReactionAdd) {
 		if m.UserID == s.State.User.ID {
 			return
 		}
 		if db.isProblemReaction(m.MessageReaction) {
-			cb(db, discordMessageID(m.ChannelID, m.MessageID))
+			cb(db, discordMessageToID(m.ChannelID, m.MessageID))
 		}
 	})
 	return nil
 }
 
-func (db *DiscordBot) OnMessage(cb OnMessageCallback) error {
+func (db *Discord) OnMessage(cb OnMessageCallback) error {
 	db.session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		cb(db, db.createMessageFromDiscordMessage(s, m.Message))
 	})
@@ -74,7 +85,7 @@ func cutoffString(input string, max int, replacement string) string {
 	return input
 }
 
-func (db *DiscordBot) toEmbed(product *amazonscraper.Product) *discordgo.MessageEmbed {
+func (db *Discord) toEmbed(product *Product) *discordgo.MessageEmbed {
 	const maxContentLength = 150
 	const replacementContent = "..."
 

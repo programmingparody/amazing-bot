@@ -2,7 +2,7 @@ package amazonscraper
 
 import "testing"
 
-func TestIsAmazonProductLink(t *testing.T) {
+func TestIsProductLink(t *testing.T) {
 	testTable := []struct {
 		input    string
 		expected bool
@@ -34,7 +34,7 @@ func TestIsAmazonProductLink(t *testing.T) {
 	}
 
 	for _, test := range testTable {
-		result := IsAmazonProductLink(test.input)
+		result := IsProductLink(test.input)
 		if result != test.expected {
 			t.Errorf("Input: %v Expected: %v Result: %v", test.input, test.expected, result)
 		}

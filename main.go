@@ -1,17 +1,18 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
-	"net/http"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
-	"wishlist-bot/scrapers"
-	"wishlist-bot/scrapers/amazonscraper"
+	"time"
+	"wishlist-bot/chatapp"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/google/uuid"
 )
 
 //Environment variables
@@ -20,16 +21,8 @@ var discordBotToken string
 var slackBotToken string
 var referralTag string
 var devMode bool
-var amazonLogPath string
-var amazonLogTmpPath string
-
-//More globals
-//TODO: Don't use globals lol
-//These globals can be encapsulated to a higher order class to contain repo/cache interfaces
-
-var amazonProductCache AmazonProductRepository
-var cachedUrlsToLogMap map[string]string
-var messageToLogMap map[string]string
+var reportDataPath string
+var htmlStoragePath string
 
 func main() {
 	//Set Environment variables
@@ -38,15 +31,22 @@ func main() {
 	slackBotToken = os.Getenv("SLACK_BOT_TOKEN")
 	referralTag = os.Getenv("AMZN_TAG")
 	devMode = os.Getenv("DEV") == "TRUE"
-	amazonLogPath = os.Getenv("AMZN_PRODUCT_LOG_PATH")
-	amazonLogTmpPath = os.Getenv("AMZN_PRODUCT_LOG_TMP_PATH")
-	fmt.Printf("Starting Bot\nDiscord Bot Token: %v\nReferral Tag: %v\nDev Mode:%v\nAmazon Product Log Path:%v\n\n", discordBotToken, referralTag, devMode, amazonLogPath)
+	reportDataPath = os.Getenv("AMZN_PRODUCT_LOG_PATH")
+	htmlStoragePath = os.Getenv("AMZN_PRODUCT_LOG_TMP_PATH")
 
-	//Initialize Globals
-
-	amazonProductCache = &MemoryStorageToRepositoryAdapter{NewMemoryStorage()}
-	cachedUrlsToLogMap = make(map[string]string)
-	messageToLogMap = make(map[string]string)
+	fmt.Printf(`
+	Starting Bot
+	Discord Bot Token: %v
+	Referral Tag: %v
+	Dev Mode:%v
+	HTML Storage Path:%v
+	Reported Products Path: %v
+	`,
+		discordBotToken,
+		referralTag,
+		devMode,
+		htmlStoragePath,
+		reportDataPath)
 
 	//Bot session setup
 
@@ -56,13 +56,26 @@ func main() {
 	}
 	defer discordSession.Close()
 
-	slackBot := newSlackChatBot(slackBotToken)
+	slackBot := chatapp.NewSlackSession(slackBotToken)
 	go slackBot.Start(":6969")
 
-	//Add amazon chatbot logic
+	//Amazing Bot setup
 
-	hookAmazonChatBotToSession(NewDiscordChatAppSession(discordSession), fetchProduct, onProblemReport)
-	hookAmazonChatBotToSession(slackBot, fetchProduct, onProblemReport)
+	masterFetcher := masterFetcher{
+		Fetcher:              HTTPFetcher{},
+		ProductStorage:       NewCacheRepo(time.Second * 5),
+		MessageIDProductRepo: NewCacheRepo(time.Second * 5),
+		HTMLStorage:          &fileStorage{Extension: "html"},
+		ReportHandler:        onReport,
+		ErrorHandler:         logError,
+	}
+	amazingBot := AmazingBot{
+		Fetcher:            &masterFetcher,
+		ProductSentHandler: masterFetcher.createProductSentHandler(),
+		ReportHandler:      masterFetcher.createReportHandler(),
+	}
+	amazingBot.Hook(chatapp.NewDiscordSession(discordSession))
+	amazingBot.Hook(slackBot)
 
 	//Code for closing the program (Ctrl+C)
 
@@ -71,17 +84,57 @@ func main() {
 	<-sc
 }
 
-//funcs to map messages to logged products
-//TODO: Use file storage instead of memory, this can get big
-func addLogID(messageID string, logID string) {
-	messageToLogMap[messageID] = logID
-}
-func getLogIDFromMessage(messageID string) string {
-	return messageToLogMap[messageID]
+func WithPromoCode(URL url.URL, tag string) url.URL {
+	query, _ := url.ParseQuery(URL.RawQuery)
+	query.Set("tag", tag)
+	URL.RawQuery = query.Encode()
+	return URL
 }
 
+type fileStorage struct {
+	Extension string
+}
+
+func (s *fileStorage) Save(id string, data []byte) error {
+	fileSafeID := sha256.Sum256([]byte(id))
+	fileName := fmt.Sprintf("%s/%x.%s", htmlStoragePath, fileSafeID, s.Extension)
+	return ioutil.WriteFile(fileName, data, 0644)
+}
+func (s *fileStorage) Get(id string) ([]byte, error) {
+	fileSafeID := sha256.Sum256([]byte(id))
+	fileName := fmt.Sprintf("%s/%x.%s", htmlStoragePath, fileSafeID, s.Extension)
+	return ioutil.ReadFile(fileName)
+}
+
+func onReport(product *chatapp.Product, html []byte) {
+	testData := ProductTestData{
+		Product: *product,
+		HTML:    string(html),
+	}
+
+	jsonData, error := json.MarshalIndent(testData, "", "\t")
+
+	if error != nil {
+		logError(error)
+		return
+	}
+	fileName := fmt.Sprintf("%s/%d.%s", reportDataPath, time.Now().Unix(), "json")
+	fmt.Printf("Report Received: %s", fileName)
+	if error = ioutil.WriteFile(fileName, jsonData, 0644); error != nil {
+		logError(error)
+	}
+}
+
+func logError(e error) {
+	fmt.Println(e)
+}
+
+/*
+OLD CODE (TODO: Remove)
+-------
+
 //onProblemReport when a user reacts with a negative emoji (reporting the reply of the bot)
-func onProblemReport(cas ChatAppSession, messageID string) {
+func onProblemReport(s chatapp.Session, messageID string) {
 	logID := getLogIDFromMessage(messageID)
 	if len(logID) == 0 {
 		return
@@ -133,3 +186,4 @@ func fetchProduct(link string, send SendProduct) {
 		Request: startingRequest,
 	})
 }
+*/
