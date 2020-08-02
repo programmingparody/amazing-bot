@@ -7,3 +7,6 @@ run.sh
 storage/
 .DS_STORE
 *.log
+aws/build.sh
+aws/build-update.sh
+debugging/
