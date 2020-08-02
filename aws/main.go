@@ -1,3 +1,21 @@
+/*
+AWS Lambda Function
+Takes a url, fetches the product from amazon using the scraper, and returns amazonscraper.OnProductParams JSON encoded as the response
+
+WARNING:
+	Amazon.com sometimes detects that it's being hit and returns an error, use with caution
+
+	Sample Error Response:
+		To discuss automated access to Amazon data please contact api-services-support@amazon.com.
+		For information about migrating to our APIs refer to our Marketplace APIs at https://developer.amazonservices.com/ref=rm_5_sv, or our Product Advertising API at https://affiliate-program.amazon.com/gp/advertising/api/detail/main.html/ref=rm_5_ac for advertising use cases.
+
+TODO:
+	Fallback fix
+		If a product is failed to be fetched through AWS, put the load back on the master server. This will cause a delay in response since we'll need to do a 2nd HTTP Request
+	Ideal fix (Fixes the warning)
+		Get an Amazon seller account and register to https://developer.amazonservices.com/
+		Create a fetchProduct type'd function that uses AmazonServices API
+*/
 package main
 
 import (
@@ -32,8 +50,8 @@ func HandleRequest(ctx context.Context, e Event) (string, error) {
 	p := <-c
 
 	data, error := json.Marshal(struct {
-		RawHTML string
 		Product amazonscraper.Product
+		RawHTML string
 	}{
 		RawHTML: string(p.RawHTML),
 		Product: *p.Product,
