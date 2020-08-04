@@ -7,11 +7,11 @@
 
 https://www.amazon.com/Guy-Fieri-Traditional-Pepperoni-Marinara/dp/B07BLMWCS5/
 
-[Discord](resources/discord.png)
+![Discord](resources/discord.png)
 
 
 ### Slack
 
 https://www.amazon.com/Guy-Fieri-Traditional-Pepperoni-Marinara/dp/B07BLMWCS5/
 
-[Discord](resources/slack.png)
+![Slack](resources/slack.png)
