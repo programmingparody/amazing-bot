@@ -4,14 +4,21 @@
 
 
 ### Discord
+#### [Add to your Server](https://discord.com/api/oauth2/authorize?client_id=683812964645732491&permissions=10304&scope=bot)
 
-https://www.amazon.com/Guy-Fieri-Traditional-Pepperoni-Marinara/dp/B07BLMWCS5/
+**Example**
+
+> https://www.amazon.com/Guy-Fieri-Traditional-Pepperoni-Marinara/dp/B07BLMWCS5/
 
 ![Discord](resources/discord.png)
 
 
 ### Slack
 
-https://www.amazon.com/Guy-Fieri-Traditional-Pepperoni-Marinara/dp/B07BLMWCS5/
+*Add to Slack link coming soon*
+
+**Example**
+
+> https://www.amazon.com/Guy-Fieri-Traditional-Pepperoni-Marinara/dp/B07BLMWCS5/
 
 ![Slack](resources/slack.png)
