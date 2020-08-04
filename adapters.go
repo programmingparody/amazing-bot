@@ -2,8 +2,9 @@ package main
 
 import (
 	"net/url"
-	"wishlist-bot/chatapp"
-	"wishlist-bot/scrapers/amazonscraper"
+
+	"github.com/programmingparody/amazing-bot/chatapp"
+	"github.com/programmingparody/amazing-bot/scrapers/amazonscraper"
 )
 
 func amazonToChatAppProduct(url *url.URL, p *amazonscraper.Product) chatapp.Product {

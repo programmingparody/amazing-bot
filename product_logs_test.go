@@ -30,7 +30,8 @@ import (
 	"os"
 	"reflect"
 	"testing"
-	"wishlist-bot/scrapers/amazonscraper"
+
+	"github.com/programmingparody/amazing-bot/scrapers/amazonscraper"
 )
 
 func testFile(file string, t *testing.T) {

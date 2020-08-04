@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 	"time"
-	"wishlist-bot/chatapp"
+
+	"github.com/programmingparody/amazing-bot/chatapp"
 )
 
 //ProductRepo stores (Save) and retrieves (Get) chatapp.Product instances

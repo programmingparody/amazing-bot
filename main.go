@@ -10,7 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"wishlist-bot/chatapp"
+
+	"github.com/programmingparody/amazing-bot/chatapp"
 
 	"github.com/bwmarrin/discordgo"
 )

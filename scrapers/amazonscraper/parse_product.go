@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
-	"wishlist-bot/scrapers"
+
+	"github.com/programmingparody/amazing-bot/scrapers"
 
 	"github.com/PuerkitoBio/goquery"
 )

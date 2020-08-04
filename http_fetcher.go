@@ -4,8 +4,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"wishlist-bot/chatapp"
-	"wishlist-bot/scrapers/amazonscraper"
+
+	"github.com/programmingparody/amazing-bot/chatapp"
+	"github.com/programmingparody/amazing-bot/scrapers/amazonscraper"
 )
 
 //HTTPFetcher sends a request to Amazon, parses the HTML, and returns a Product

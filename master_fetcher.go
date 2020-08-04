@@ -3,8 +3,9 @@ package main
 import (
 	"fmt"
 	"net/url"
-	"wishlist-bot/chatapp"
-	"wishlist-bot/scrapers/amazonscraper"
+
+	"github.com/programmingparody/amazing-bot/chatapp"
+	"github.com/programmingparody/amazing-bot/scrapers/amazonscraper"
 )
 
 type byteStorage interface {

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"wishlist-bot/chatapp"
+	"github.com/programmingparody/amazing-bot/chatapp"
 )
 
 //ProductTestData is used in product_logs_test.go to quickly fix parsing issues

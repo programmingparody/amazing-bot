@@ -25,7 +25,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"wishlist-bot/scrapers/amazonscraper"
+
+	"github.com/programmingparody/amazing-bot/scrapers/amazonscraper"
 
 	"github.com/aws/aws-lambda-go/lambda"
 )

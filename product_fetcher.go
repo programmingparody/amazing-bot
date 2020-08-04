@@ -2,7 +2,8 @@ package main
 
 import (
 	"net/url"
-	"wishlist-bot/chatapp"
+
+	"github.com/programmingparody/amazing-bot/chatapp"
 )
 
 //ProductFetcher represents a type that can fetch and return a Product
