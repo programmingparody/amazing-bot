@@ -61,7 +61,7 @@ func main() {
 	}
 	defer discordSession.Close()
 
-	slackBot := chatapp.NewSlackSession(slackBotToken)
+	slackBot := chatapp.NewSlackSession(slackBotToken, "-1")
 	go slackBot.Start(":6969")
 
 	//Amazing Bot setup
