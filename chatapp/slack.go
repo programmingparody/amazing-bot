@@ -29,7 +29,6 @@ func (s *Slack) apiRequest(url string, jsonData []byte) ([]byte, error) {
 
 	resData, error := ioutil.ReadAll(res.Body)
 	defer res.Body.Close()
-
 	return resData, error
 }
 
@@ -46,13 +45,16 @@ func (a *slackMessageActions) RespondWithProduct(p *Product) (string, error) {
 
 	id := responseMessage.Message.TimeStamp
 	channelID := responseMessage.Channel
-
 	s.react(channelID, id, s.reportReactionCode)
 
+	if len(s.myID) == 0 {
+		s.myID = responseMessage.Message.UserID
+	}
 	return id, nil
 }
 
 type slackMessage struct {
+	BotID           string `json:"bot_id"`
 	Type            string `json:"type"`
 	Text            string `json:"text"`
 	UserID          string `json:"user"`
@@ -109,6 +111,7 @@ type Slack struct {
 	typeToHandler      map[string][]slackEventHandlerFunc
 	token              string
 	reportReactionCode string
+	myID               string
 }
 
 //NewSlackSession returns a Slack session that implements chatapp.Session
@@ -247,7 +250,7 @@ func (s *Slack) OnMessage(cb OnMessageCallback) error {
 					cb(s, &Message{
 						ID:                   e.ClientMessageID,
 						Content:              element.URL,
-						MessageIsFromThisBot: false,
+						MessageIsFromThisBot: len(emc.Message.BotID) != 0,
 						Actions: &slackMessageActions{
 							event: &e,
 							slack: s,
@@ -265,8 +268,8 @@ func (s *Slack) OnProductProblemReport(cb OnProductProblemReportCallback) error 
 	temp := s.typeToHandler[slackeventMessage]
 	s.typeToHandler[slackeventReactionAdded] = append(temp, func(emc *slackEventMessageContainer, w http.ResponseWriter, r *http.Request) {
 		reaction := emc.Event.Reaction
-		fmt.Println("REACTION:" + reaction)
-		if reaction == s.reportReactionCode {
+		reactionFromBot := emc.Event.UserID == s.myID
+		if reaction == s.reportReactionCode && !reactionFromBot {
 			cb(s, emc.Event.Item.TimeStamp)
 		}
 	})
@@ -283,7 +286,6 @@ func (s *Slack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	message, error := parseEventMessage(r.Body)
 
 	if error != nil {
-		fmt.Println(error)
 		return
 	}
 
