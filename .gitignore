@@ -10,3 +10,5 @@ storage/
 aws/build.sh
 aws/build-update.sh
 debugging/
+deploy.sh
+config.json

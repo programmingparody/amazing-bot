@@ -83,6 +83,7 @@ type slackEventMessageContainer struct {
 	Channel   string       `json:"channel"`
 	TimeStamp string       `json:"ts"`
 	Token     string       `json:"token"`
+	Challenge string       `json:"challenge"`
 	Event     slackMessage `json:"event"`
 	Message   slackMessage `json:"message"`
 }
@@ -278,7 +279,7 @@ func (s *Slack) OnProductProblemReport(cb OnProductProblemReportCallback) error 
 
 //Start an HTTP server and listen for Slack events
 func (s *Slack) Start(port string) {
-	http.ListenAndServe(port, s)
+	http.ListenAndServeTLS(port, "./certificate.pem", "./key.pem", s)
 }
 
 //ServeHTTP to implement http.Handler
@@ -295,5 +296,7 @@ func (s *Slack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for _, h := range handlers {
 			h(message, w, r)
 		}
+	} else {
+		w.Write([]byte(message.Challenge))
 	}
 }

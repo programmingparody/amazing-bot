@@ -26,6 +26,7 @@ var reportDataPath string
 var htmlStoragePath string
 
 func main() {
+	config := readConfigFromFile("./config.json")
 	//Set Environment variables
 
 	discordBotToken = os.Getenv("DISCORD_BOT_TOKEN")
@@ -67,7 +68,7 @@ func main() {
 	//Amazing Bot setup
 
 	masterFetcher := masterFetcher{
-		Fetcher:              HTTPFetcher{},
+		Fetcher:              HTTPFetcher{Cookies: config.HTTPCookies},
 		ProductStorage:       newCacheRepo(time.Second * 5),
 		MessageIDProductRepo: newCacheRepo(time.Second * 5),
 		HTMLStorage:          &fileStorage{Extension: "html"},
