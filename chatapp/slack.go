@@ -37,7 +37,7 @@ func (a *slackMessageActions) RespondWithProduct(p *Product) (string, error) {
 	e := a.event
 	s := a.slack
 
-	data := slackRichTextJSONFromProduct(e.ChannelID, p, s.reportReactionCode)
+	data := slackRichTextJSONFromProduct(e.ChannelID, e.UserID, p, s.reportReactionCode)
 	resData, _ := s.apiRequest("https://slack.com/api/chat.postMessage", []byte(data))
 
 	var responseMessage slackEventMessageContainer
@@ -126,7 +126,7 @@ func NewSlackSession(token string, reportReactionCode string) *Slack {
 	}
 }
 
-func slackRichTextJSONFromProduct(channelID string, p *Product, negativeReaction string) string {
+func slackRichTextJSONFromProduct(channelID string, senderID string, p *Product, negativeReaction string) string {
 	funcMap := template.FuncMap{
 		"url": func(p *Product) string {
 			return p.URL.String()
@@ -155,6 +155,9 @@ func slackRichTextJSONFromProduct(channelID string, p *Product, negativeReaction
 		},
 		"reportReaction": func() string {
 			return negativeReaction
+		},
+		"senderID": func() string {
+			return senderID
 		},
 	}
 	//WARNING: Building JSON this way is at risk of failing randomly and cause validation errors at runtime
@@ -206,7 +209,7 @@ func slackRichTextJSONFromProduct(channelID string, p *Product, negativeReaction
 			"elements": [
 				{
 					"type": "mrkdwn",
-					"text": "*Something wrong with this result?*\nReact with :{{reportReaction}}: to report and we'll look into it!"
+					"text": "Product posted by <@{{senderID}}>\n*Something wrong with this result?*\nReact with :{{reportReaction}}: to report and we'll look into it!"
 				}
 			]
 		}

@@ -26,7 +26,7 @@ func (a *discordMessageActions) Remove() error {
 
 //RespondWithProduct implementation for Actions
 func (a *discordMessageActions) RespondWithProduct(p *Product) (string, error) {
-	embed := a.discord.toEmbed(p)
+	embed := a.discord.toEmbed(p, a.message.Author.ID)
 	m, error := a.session.ChannelMessageSendEmbed(a.message.ChannelID, embed)
 	a.session.MessageReactionAdd(m.ChannelID, m.ID, a.discord.problemEmoji)
 	if error != nil {
@@ -57,6 +57,7 @@ func (db *Discord) createMessageFromDiscordMessage(s *discordgo.Session, m *disc
 			discord: db,
 			message: m,
 		},
+		AuthorID: m.Author.ID,
 	}
 }
 
@@ -92,7 +93,7 @@ func cutoffString(input string, max int, replacement string) string {
 	return input
 }
 
-func (db *Discord) toEmbed(product *Product) *discordgo.MessageEmbed {
+func (db *Discord) toEmbed(product *Product, authorID string) *discordgo.MessageEmbed {
 	const maxContentLength = 150
 	const replacementContent = "..."
 
@@ -111,7 +112,6 @@ func (db *Discord) toEmbed(product *Product) *discordgo.MessageEmbed {
 		Title:       title,
 		URL:         product.URL.String(),
 		Description: cutoffString(product.Description, maxContentLength, replacementContent),
-
 		Thumbnail: &discordgo.MessageEmbedThumbnail{
 			URL: product.ImageURL,
 		},
@@ -146,8 +146,10 @@ func (db *Discord) toEmbed(product *Product) *discordgo.MessageEmbed {
 	embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 		Name: "\u200B",
 		Value: fmt.Sprintf(
-			`**Something wrong with this result?**
-			React with %s to report this embed and pay respects`, db.problemEmoji),
+			`Product posted by <@%s>
+			
+			**Something wrong with this result?**
+			React with %s to report this embed and pay respects`, authorID, db.problemEmoji),
 		Inline: false,
 	})
 	return &embed
