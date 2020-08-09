@@ -8,7 +8,7 @@
 
 **Example**
 
-> https://www.amazon.com/Guy-Fieri-Traditional-Pepperoni-Marinara/dp/B07BLMWCS5/
+> https://www.amazon.com/Nike-Janoski-Hombres-Zapatos-Monopat%C3%ADn/dp/B07PWJX65S/ref=sr_1_2?dchild=1&keywords=nike%2Bsb&psc=1&qid=1596722790&sr=8-2
 
 ![Discord](resources/discord.png)
 
@@ -19,6 +19,6 @@
 
 **Example**
 
-> https://www.amazon.com/Samsung-QN65Q60RAFXZA-Flat-QLED-Smart/dp/B07N4L5VYG/ref=sr_1_4?dchild=1&keywords=samsung+tv&qid=1596612376&sr=8-4
+> https://www.amazon.com/Currents-Tame-Impala/dp/B00XBWBWBK/ref=tmm_acd_swatch_0?_encoding=UTF8&qid=1596964831&sr=8-1
 
 ![Slack](resources/slack.png)

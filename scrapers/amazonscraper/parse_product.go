@@ -80,7 +80,7 @@ func ParseProductHTML(html []byte) (*Product, error) {
 		productTitle = productElement.Text()
 	}
 
-	priceElement, _ := findFallback(document, "#price_inside_buybox", "#priceblock_ourprice")
+	priceElement, _ := findFallback(document, "#price_inside_buybox", "#priceblock_ourprice", "#newBuyBoxPrice")
 	priceText := priceElement.First().Text()
 	price := numbersFromStringFallback(priceText, 0)[0]
 

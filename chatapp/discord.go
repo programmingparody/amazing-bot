@@ -57,7 +57,6 @@ func (db *Discord) createMessageFromDiscordMessage(s *discordgo.Session, m *disc
 			discord: db,
 			message: m,
 		},
-		AuthorID: m.Author.ID,
 	}
 }
 
