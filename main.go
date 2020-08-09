@@ -24,6 +24,7 @@ var amazonReferralTag string
 var devMode bool
 var reportDataPath string
 var htmlStoragePath string
+var slackWebPort string
 
 func main() {
 	config := readConfigFromFile("./config.json")
@@ -35,6 +36,7 @@ func main() {
 	devMode = os.Getenv("DEV") == "TRUE"
 	reportDataPath = os.Getenv("REPORT_PATH")
 	htmlStoragePath = os.Getenv("HTML_STORAGE_PATH")
+	slackWebPort = os.Getenv("SLACK_WEB_PORT")
 
 	fmt.Printf(`
 	========================
@@ -63,7 +65,7 @@ func main() {
 	defer discordSession.Close()
 
 	slackBot := chatapp.NewSlackSession(slackBotToken, "-1")
-	go slackBot.Start(":6969")
+	go slackBot.Start(slackWebPort)
 
 	//Amazing Bot setup
 

@@ -1,6 +1,7 @@
 #!/bin/bash
 DISCORD_BOT_TOKEN="Bot {{Token}}" \
 SLACK_BOT_TOKEN="xoxb-{{Token}}" \
+SLACK_WEB_PORT=":8080" \
 AMZN_REFERRAL_TAG="{{Amazon affiliate tag}}" \
 HTML_STORAGE_PATH="$(pwd)/logs/product_logs/html" \
 REPORT_PATH="$(pwd)/logs/product_logs/reports" \

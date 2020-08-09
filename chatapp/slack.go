@@ -279,7 +279,7 @@ func (s *Slack) OnProductProblemReport(cb OnProductProblemReportCallback) error 
 
 //Start an HTTP server and listen for Slack events
 func (s *Slack) Start(port string) {
-	http.ListenAndServeTLS(port, "./certificate.pem", "./key.pem", s)
+	http.ListenAndServe(port, s)
 }
 
 //ServeHTTP to implement http.Handler
