@@ -12,7 +12,7 @@ import (
 )
 
 type slackMessageActions struct {
-	event *slackEvent
+	event *slackMessage
 	slack *Slack
 }
 
@@ -21,28 +21,40 @@ func (a *slackMessageActions) Remove() error {
 	return nil
 }
 
+func (s *Slack) apiRequest(url string, jsonData []byte) ([]byte, error) {
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer([]byte(jsonData)))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", s.token))
+	req.Header.Add("Content-type", "application/json")
+	res, _ := http.DefaultClient.Do(req)
+
+	resData, error := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+	return resData, error
+}
+
 //RespondWithProduct implementation for Actions
 func (a *slackMessageActions) RespondWithProduct(p *Product) (string, error) {
 	e := a.event
 	s := a.slack
 
-	data := slackRichTextJSONFromProduct(e.ChannelID, p)
-	req, _ := http.NewRequest("POST", "https://slack.com/api/chat.postMessage", bytes.NewBuffer([]byte(data)))
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", s.token))
-	req.Header.Add("Content-type", "application/json")
-	res, _ := http.DefaultClient.Do(req)
-
-	resData, _ := ioutil.ReadAll(res.Body)
-	defer res.Body.Close()
+	data := slackRichTextJSONFromProduct(e.ChannelID, p, s.reportReactionCode)
+	resData, _ := s.apiRequest("https://slack.com/api/chat.postMessage", []byte(data))
 
 	var responseMessage slackEventMessageContainer
 	json.Unmarshal(resData, &responseMessage)
-	fmt.Println(responseMessage)
-	//TODO: Return new message id
-	return responseMessage.Event.TimeStamp, nil
+
+	id := responseMessage.Message.TimeStamp
+	channelID := responseMessage.Channel
+	s.react(channelID, id, s.reportReactionCode)
+
+	if len(s.myID) == 0 {
+		s.myID = responseMessage.Message.UserID
+	}
+	return id, nil
 }
 
-type slackEvent struct {
+type slackMessage struct {
+	BotID           string `json:"bot_id"`
 	Type            string `json:"type"`
 	Text            string `json:"text"`
 	UserID          string `json:"user"`
@@ -59,18 +71,27 @@ type slackEvent struct {
 	} `json:"blocks"`
 	ChannelID string `json:"channel"`
 	TimeStamp string `json:"ts"`
+	Reaction  string `json:"reaction"`
+	Item      struct {
+		Type      string `json:"type"`
+		Channel   string `json:"channel"`
+		TimeStamp string `json:"ts"`
+	}
 }
 
 type slackEventMessageContainer struct {
-	Channel   string     `json:"channel"`
-	TimeStamp string     `json:"ts"`
-	Token     string     `json:"token"`
-	Event     slackEvent `json:"event"`
+	Channel   string       `json:"channel"`
+	TimeStamp string       `json:"ts"`
+	Token     string       `json:"token"`
+	Challenge string       `json:"challenge"`
+	Event     slackMessage `json:"event"`
+	Message   slackMessage `json:"message"`
 }
 
 func parseEventMessage(reader io.ReadCloser) (*slackEventMessageContainer, error) {
 	message := slackEventMessageContainer{}
 	data, error := ioutil.ReadAll(reader)
+
 	if error == nil {
 		defer reader.Close()
 		error = json.Unmarshal(data, &message)
@@ -80,28 +101,32 @@ func parseEventMessage(reader io.ReadCloser) (*slackEventMessageContainer, error
 
 //Event type names
 const (
-	slackeventMessage = "message"
+	slackeventMessage       = "message"
+	slackeventReactionAdded = "reaction_added"
 )
 
 type slackEventHandlerFunc func(e *slackEventMessageContainer, w http.ResponseWriter, r *http.Request)
 
 //Slack Session implementation
 type Slack struct {
-	typeToHandler map[string][]slackEventHandlerFunc
-	token         string
+	typeToHandler      map[string][]slackEventHandlerFunc
+	token              string
+	reportReactionCode string
+	myID               string
 }
 
 //NewSlackSession returns a Slack session that implements chatapp.Session
-func NewSlackSession(token string) *Slack {
+func NewSlackSession(token string, reportReactionCode string) *Slack {
 	handlers := make(map[string][]slackEventHandlerFunc)
 	handlers[slackeventMessage] = []slackEventHandlerFunc{}
 	return &Slack{
-		typeToHandler: handlers,
-		token:         token,
+		typeToHandler:      handlers,
+		token:              token,
+		reportReactionCode: reportReactionCode,
 	}
 }
 
-func slackRichTextJSONFromProduct(channelID string, p *Product) string {
+func slackRichTextJSONFromProduct(channelID string, p *Product, negativeReaction string) string {
 	funcMap := template.FuncMap{
 		"url": func(p *Product) string {
 			return p.URL.String()
@@ -127,6 +152,9 @@ func slackRichTextJSONFromProduct(channelID string, p *Product) string {
 				return input[:max] + replacement
 			}
 			return input
+		},
+		"reportReaction": func() string {
+			return negativeReaction
 		},
 	}
 	//WARNING: Building JSON this way is at risk of failing randomly and cause validation errors at runtime
@@ -178,7 +206,7 @@ func slackRichTextJSONFromProduct(channelID string, p *Product) string {
 			"elements": [
 				{
 					"type": "mrkdwn",
-					"text": "*Something wrong with this result?*\nReact with :cry: to report and we'll look into it!"
+					"text": "*Something wrong with this result?*\nReact with :{{reportReaction}}: to report and we'll look into it!"
 				}
 			]
 		}
@@ -197,18 +225,33 @@ func slackRichTextJSONFromProduct(channelID string, p *Product) string {
 	return fullJSONString
 }
 
+func (s *Slack) react(channelID string, id string, reactionCode string) {
+	data, _ := json.Marshal(struct {
+		Channel      string `json:"channel"`
+		ReactionCode string `json:"name"`
+		ID           string `json:"timestamp"`
+	}{
+		Channel:      channelID,
+		ReactionCode: reactionCode,
+		ID:           id,
+	})
+
+	s.apiRequest("https://slack.com/api/reactions.add", data)
+}
+
 //OnMessage implements Session
 func (s *Slack) OnMessage(cb OnMessageCallback) error {
 	temp := s.typeToHandler[slackeventMessage]
 	s.typeToHandler[slackeventMessage] = append(temp, func(emc *slackEventMessageContainer, w http.ResponseWriter, r *http.Request) {
 		e := emc.Event
+
 		for _, b := range e.Blocks {
 			for _, parentElement := range b.Elements {
 				for _, element := range parentElement.Elements {
 					cb(s, &Message{
 						ID:                   e.ClientMessageID,
 						Content:              element.URL,
-						MessageIsFromThisBot: false,
+						MessageIsFromThisBot: len(emc.Message.BotID) != 0,
 						Actions: &slackMessageActions{
 							event: &e,
 							slack: s,
@@ -222,7 +265,15 @@ func (s *Slack) OnMessage(cb OnMessageCallback) error {
 }
 
 //OnProductProblemReport implements Session
-func (s *Slack) OnProductProblemReport(OnProductProblemReportCallback) error {
+func (s *Slack) OnProductProblemReport(cb OnProductProblemReportCallback) error {
+	temp := s.typeToHandler[slackeventMessage]
+	s.typeToHandler[slackeventReactionAdded] = append(temp, func(emc *slackEventMessageContainer, w http.ResponseWriter, r *http.Request) {
+		reaction := emc.Event.Reaction
+		reactionFromBot := emc.Event.UserID == s.myID
+		if reaction == s.reportReactionCode && !reactionFromBot {
+			cb(s, emc.Event.Item.TimeStamp)
+		}
+	})
 	return nil
 }
 
@@ -236,7 +287,6 @@ func (s *Slack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	message, error := parseEventMessage(r.Body)
 
 	if error != nil {
-		fmt.Println(error)
 		return
 	}
 
@@ -246,5 +296,7 @@ func (s *Slack) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for _, h := range handlers {
 			h(message, w, r)
 		}
+	} else {
+		w.Write([]byte(message.Challenge))
 	}
 }

@@ -56,22 +56,25 @@ func (ab *AmazingBot) handleMessage(c chatapp.Session, m *chatapp.Message) {
 		return
 	}
 	for _, link := range amazonLinks {
-		url, error := url.Parse(link)
+		URL, error := url.Parse(link)
 		if error != nil {
 			return
 		}
-		p, _ := ab.Fetcher.Fetch(url)
-		_, wholeMessageAsURLError := url.Parse(m.Content)
-		if wholeMessageAsURLError == nil {
-			go m.Actions.Remove()
-		}
-		id, _ := m.Actions.RespondWithProduct(p)
-		if ab.ProductSentHandler != nil {
-			ab.ProductSentHandler(&SentProductEvent{
-				ResponseToMessage: m,
-				NewMessageID:      id,
-				Product:           p,
-			})
-		}
+
+		go func(URL *url.URL) {
+			p, _ := ab.Fetcher.Fetch(URL)
+			_, wholeMessageAsURLError := url.Parse(m.Content)
+			if wholeMessageAsURLError == nil {
+				go m.Actions.Remove()
+			}
+			id, _ := m.Actions.RespondWithProduct(p)
+			if ab.ProductSentHandler != nil {
+				ab.ProductSentHandler(&SentProductEvent{
+					ResponseToMessage: m,
+					NewMessageID:      id,
+					Product:           p,
+				})
+			}
+		}(URL)
 	}
 }

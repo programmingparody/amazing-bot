@@ -24,8 +24,10 @@ var amazonReferralTag string
 var devMode bool
 var reportDataPath string
 var htmlStoragePath string
+var slackWebPort string
 
 func main() {
+	config := readConfigFromFile("./config.json")
 	//Set Environment variables
 
 	discordBotToken = os.Getenv("DISCORD_BOT_TOKEN")
@@ -34,6 +36,7 @@ func main() {
 	devMode = os.Getenv("DEV") == "TRUE"
 	reportDataPath = os.Getenv("REPORT_PATH")
 	htmlStoragePath = os.Getenv("HTML_STORAGE_PATH")
+	slackWebPort = os.Getenv("SLACK_WEB_PORT")
 
 	fmt.Printf(`
 	========================
@@ -61,13 +64,13 @@ func main() {
 	}
 	defer discordSession.Close()
 
-	slackBot := chatapp.NewSlackSession(slackBotToken)
-	go slackBot.Start(":6969")
+	slackBot := chatapp.NewSlackSession(slackBotToken, "-1")
+	go slackBot.Start(slackWebPort)
 
 	//Amazing Bot setup
 
 	masterFetcher := masterFetcher{
-		Fetcher:              HTTPFetcher{},
+		Fetcher:              HTTPFetcher{Cookies: config.HTTPCookies},
 		ProductStorage:       newCacheRepo(time.Second * 5),
 		MessageIDProductRepo: newCacheRepo(time.Second * 5),
 		HTMLStorage:          &fileStorage{Extension: "html"},

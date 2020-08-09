@@ -19,6 +19,6 @@
 
 **Example**
 
-> https://www.amazon.com/Guy-Fieri-Traditional-Pepperoni-Marinara/dp/B07BLMWCS5/
+> https://www.amazon.com/Samsung-QN65Q60RAFXZA-Flat-QLED-Smart/dp/B07N4L5VYG/ref=sr_1_4?dchild=1&keywords=samsung+tv&qid=1596612376&sr=8-4
 
 ![Slack](resources/slack.png)
