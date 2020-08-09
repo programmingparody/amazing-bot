@@ -20,8 +20,8 @@ type Actions interface {
 
 //Message from a chat
 type Message struct {
-	ID                   string
+	ID                   string //Unique ID of the message
 	Content              string
-	MessageIsFromThisBot bool
+	MessageIsFromThisBot bool //Is this our own message (used for ignoring messages)
 	Actions              Actions
 }
